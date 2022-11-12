@@ -102,10 +102,12 @@ public:
                 fun}};
     }
 
-    std::string mName;
+    
 
 private:
-    
+    friend class Case;
+    std::string mName;
+
     std::vector<int> mBuffer;
 
     std::mutex mMutex;  // protect mBuffer
