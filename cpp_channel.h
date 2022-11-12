@@ -107,7 +107,9 @@ public:
                 fun}};
     }
 
-    
+    std::string getName() {
+        return mName;
+    }
 
 private:
     friend class Case;
@@ -275,5 +277,15 @@ void printStatus(const Status& status) {
     }
     printf("======================================\n");
 }
+
+void printNamedStatus(const NamedStatus& status) {
+    printf("======================================\n");
+    for (auto &[switchName, method, chanName] : status)
+    {
+        printf("---%s\t%s\t%s---\n", switchName.c_str(), method == METHOD::READ ? "read" : "write", chanName.c_str());
+    }
+    printf("======================================\n");
+}
+
 } //ns
 
