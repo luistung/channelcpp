@@ -25,6 +25,7 @@ enum METHOD
 
 using Task = std::function<bool(const std::string&, const std::string&, int)>;
 using Status = std::vector<std::tuple<Switch*, METHOD, Chan*>>;
+using NamedStatus = std::vector<std::tuple<std::string, METHOD, std::string>>;
 
 class Case
 {
@@ -54,6 +55,7 @@ private:
     void doSwitch(std::initializer_list<Case> caseVec);
     friend class Case;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
+    friend NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec);
     friend void printStatus(const Status &status);
 
     std::string mName;
@@ -110,6 +112,7 @@ public:
 private:
     friend class Case;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
+    friend NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec);
     friend void printStatus(const Status &status);
     std::string mName;
 
@@ -247,6 +250,18 @@ Status watchStatus(const std::vector<Chan*>& chanVec) {
     {
         for (auto& [pSwitch, method] : pChan->waitingSwitchList) {
             ret.emplace_back(pSwitch, method, pChan);
+        }
+    }
+    return ret;
+}
+
+NamedStatus watchNamedStatus(const std::vector<Chan*>& chanVec) {
+    std::lock_guard<std::mutex>(gCoordinator.mMutex);
+    NamedStatus ret;
+    for (auto &pChan : chanVec)
+    {
+        for (auto& [pSwitch, method] : pChan->waitingSwitchList) {
+            ret.emplace_back(pSwitch->mName, method, pChan->mName);
         }
     }
     return ret;
