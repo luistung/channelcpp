@@ -24,6 +24,7 @@ enum METHOD
 };
 
 using Task = std::function<bool(const std::string&, const std::string&, int)>;
+using Status = std::vector<std::tuple<Switch*, METHOD, Chan*>>;
 
 class Case
 {
@@ -52,6 +53,8 @@ public:
 private:
     void doSwitch(std::initializer_list<Case> caseVec);
     friend class Case;
+    friend Status watchStatus(const std::vector<Chan *> &chanVec);
+    friend void printStatus(const Status &status);
 
     std::string mName;
     std::map<Chan *, Case> mpChan2Case;
@@ -106,6 +109,8 @@ public:
 
 private:
     friend class Case;
+    friend Status watchStatus(const std::vector<Chan *> &chanVec);
+    friend void printStatus(const Status &status);
     std::string mName;
 
     std::vector<int> mBuffer;
@@ -116,7 +121,6 @@ private:
 public:
     std::list<std::pair<Switch *, METHOD>> waitingSwitchList;
 };
-
 
 struct Coordinator
 {
@@ -236,5 +240,25 @@ void Switch::doSwitch(std::initializer_list<Case> caseVec)  {
 
 }
 
+Status watchStatus(const std::vector<Chan*>& chanVec) {
+    std::lock_guard<std::mutex>(gCoordinator.mMutex);
+    Status ret;
+    for (auto &pChan : chanVec)
+    {
+        for (auto& [pSwitch, method] : pChan->waitingSwitchList) {
+            ret.emplace_back(pSwitch, method, pChan);
+        }
+    }
+    return ret;
+}
+
+void printStatus(const Status& status) {
+    printf("======================================\n");
+    for (auto &[pSwitch, method, pChan] : status)
+    {
+        printf("---%s\t%s\t%s---\n", pSwitch->mName.c_str(), method == METHOD::READ ? "read" : "write", pChan->mName.c_str());
+    }
+    printf("======================================\n");
+}
 } //ns
 

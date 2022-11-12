@@ -52,6 +52,8 @@ int main() {
         }
 
     };
+    std::this_thread::sleep_for(1s);
+    printStatus(Chan::watchStatus(chanVec));
     t.join();
 
     return 0;
