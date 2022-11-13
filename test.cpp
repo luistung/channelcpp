@@ -1,6 +1,7 @@
 #include <channel.h>
 #include <random>
 #include <set>
+#include <functional>
 
 std::random_device seed;
 //std::mt19937 engine(seed());
@@ -27,39 +28,44 @@ bool sampleBernoulli() {
     return uniformReal(engine) > 0.5;
 }
 
-std::chrono::milliseconds sampleSleep() {
+std::chrono::microseconds sampleSleep() {
     std::uniform_int_distribution<> uniformDist(0, 5);
-    int ms = uniformDist(engine);
-    std::chrono::milliseconds ret = chrono::milliseconds(static_cast<std::chrono::milliseconds::rep>(ms));
+    std::chrono::microseconds ret = chrono::microseconds(uniformDist(engine) * 100000);
     return ret;
 }
 
-using SelectInstance = vector<tuple<string, milliseconds, ::Channel::METHOD, Channel::Chan*>>;
+using CaseInstance = tuple<microseconds, ::Channel::METHOD, Channel::Chan *, std::shared_ptr<int>>;
+using SelectInstance = pair<string,vector<CaseInstance>>;
+using TestCase = vector<pair<microseconds, SelectInstance>>;
 
-SelectInstance sampleSelect(const std::string& name, const std::vector<ChanPtr>& chanVec) {
+SelectInstance sampleSelect(const std::string& name, const std::vector<Channel::Chan*>& chanVec) {
     SelectInstance ret;
-    for (ChanPtr chan : chanVec)
+    ret.first = name;
+    for (Channel::Chan *pChan : chanVec)
     {
         if (!sampleBernoulli())
             continue;
         Channel::METHOD method = sampleBernoulli() ? ::Channel::METHOD::WRITE : ::Channel::METHOD::READ;
-        ret.push_back(make_tuple(name, sampleSleep(), method, chan.get()));
+        ret.second.push_back(make_tuple(sampleSleep(), method, pChan, make_shared<int>(0)));
     }
     return ret;
 }
 
-vector<SelectInstance> sampleTestCase (const std::vector<ChanPtr>& chanVec) {
-    vector<SelectInstance> ret;
+TestCase sampleTestCase (const std::vector<Channel::Chan*>& chanVec) {
+    TestCase ret;
     std::uniform_int_distribution<> uniformDist(1, 6);
     int selectNum = uniformDist(engine);
+    std::chrono::microseconds accSleepTime(0s);
     for (int i = 0; i < selectNum; i++) {
         string name = "Select" + to_string(i);
-        ret.emplace_back(sampleSelect(name, chanVec));
+        accSleepTime += sampleSleep();
+        cout << accSleepTime.count() << endl;
+        ret.emplace_back(accSleepTime, sampleSelect(name, chanVec));
     }
     return ret;
 }
 
-void doEmulate(const vector<SelectInstance>& selectInstances, 
+void doEmulate(const TestCase& selectInstances, 
                 int pos,
                 set<const SelectInstance*>& cur, //alive select
                 set<set<const SelectInstance*>>& res
@@ -70,14 +76,14 @@ void doEmulate(const vector<SelectInstance>& selectInstances,
     }
     map<pair<Channel::METHOD, Channel::Chan *>, vector<const SelectInstance *>> wait2selectIns;
     for (const SelectInstance* pSelectIns : cur) {
-        for (auto& [name, _, method, pChan] : *pSelectIns) {
+        for (auto& [_, method, pChan, __] : pSelectIns->second) {
             wait2selectIns[make_pair(method, pChan)].push_back(pSelectIns);
         }
     }
 
-    const SelectInstance* pSelectInstance = &selectInstances[pos];
+    const SelectInstance* pSelectInstance = &selectInstances[pos].second;
     bool found = false;
-    for (auto &[name, _, method, pChan] : *pSelectInstance)
+    for (auto &[_, method, pChan, __] : pSelectInstance->second)
     {
         Channel::METHOD needMethod = (method == Channel::METHOD::READ ? Channel::METHOD::WRITE : Channel::METHOD::READ);
         auto key = make_pair(needMethod, pChan);
@@ -97,7 +103,7 @@ void doEmulate(const vector<SelectInstance>& selectInstances,
     }
 }
 
-set<Channel::NamedStatus> emulate(const vector<SelectInstance>& selectInstances) {
+set<Channel::NamedStatus> emulate(const TestCase& selectInstances) {
     set<const SelectInstance *> cur;
     set<set<const SelectInstance *>> res;
     doEmulate(selectInstances, 0, cur, res);
@@ -106,8 +112,9 @@ set<Channel::NamedStatus> emulate(const vector<SelectInstance>& selectInstances)
     for (const set<const SelectInstance *> &selectInstanceSet : res) {
         Channel::NamedStatus status;
         for (const SelectInstance *pSelectInstance : selectInstanceSet) {
-            for (auto& [name, _, method, pChan] : *pSelectInstance) {
-                status.emplace_back(name, method, pChan->getName());
+            string selectName = pSelectInstance->first;
+            for (auto &[_, method, pChan, __] : pSelectInstance->second) {
+                status.emplace_back(selectName, method, pChan->getName());
             }
         }
         ret.insert(status);
@@ -115,23 +122,64 @@ set<Channel::NamedStatus> emulate(const vector<SelectInstance>& selectInstances)
     return ret;
 }
 
-vector<Channel::NamedStatus> getInitNameStatus(const vector<SelectInstance>& selectInstances) {
+vector<Channel::NamedStatus> getInitNameStatus(TestCase& selectInstances) {
     vector<Channel::NamedStatus> ret;
-    for (auto& selectInstance : selectInstances) {
+    for (auto& [selectSleepTime, selectInstance] : selectInstances) {
         Channel::NamedStatus namedStatus;
-        for (auto &[name, _, method, pChan] : selectInstance)
+        string selectName = selectInstance.first;
+        for (auto &[_, method, pChan, __] : selectInstance.second)
         {
-            namedStatus.emplace_back(name, method, pChan->getName());
+            namedStatus.emplace_back(selectName, method, pChan->getName());
         }
         ret.emplace_back(namedStatus);
     }
     return ret;
 }
 
-int main() {
+auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> Channel::Task
+{
+    auto retFun = [=](const std::string &selectName, const std::string &chanName,
+                     int a)
+    {
+        //this_thread::sleep_for(sleepTime);
+        log("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), a);
+        return true;
+    };
+    return retFun;
+};
 
+void executeTestCase(const vector<Channel::Chan *> &chanVec, const TestCase& testCase) {
+    vector<thread> threadPool;
+    for (auto& [selectSleepTime, selectInstance] : testCase)
+    {
+        std::vector<Channel::Case> caseVec;
+        string selectName = selectInstance.first;
+        for (const tuple<microseconds, ::Channel::METHOD, Channel::Chan *, shared_ptr<int>> &caseTup : selectInstance.second)
+        {
+            microseconds caseSleepTime = get<0>(caseTup);
+            Channel::METHOD method = get<1>(caseTup);
+            caseVec.emplace_back(method, get<2>(caseTup), get<3>(caseTup).get(), taskFun(microseconds(0), method));
+        }
+        auto threadFun = [](string selectName, std::vector<Channel::Case> caseVec, microseconds selectSleepTime) {
+            std::cout << selectName << std::endl;
+            this_thread::sleep_for(selectSleepTime);
+            Channel::Select(selectName, caseVec.begin(), caseVec.end());
+        };
+        threadPool.emplace_back(threadFun, selectName, caseVec, selectSleepTime);
+    }
+    Channel::NamedStatus namedStatus = Channel::watchNamedStatus(chanVec);
+    this_thread::sleep_for(5s);
+    Channel::printNamedStatus(namedStatus);
+    for (auto &t : threadPool)
+        t.join();
+}
+
+int main() {
     std::vector<ChanPtr> chans = sampleChan();
-    vector<SelectInstance> testCase = sampleTestCase(chans);
+    std::vector<Channel::Chan *> chanVec;
+    transform(chans.begin(), chans.end(), std::back_inserter(chanVec), [](auto &c)
+              { return c.get(); });
+    TestCase testCase = sampleTestCase(chanVec);
     for(auto &i : getInitNameStatus(testCase)) {
         printNamedStatus(i);
     }
@@ -142,5 +190,7 @@ int main() {
     {
         printNamedStatus(i);
     }
+
+    executeTestCase(chanVec, testCase);
     return 0;
 }

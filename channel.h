@@ -50,9 +50,14 @@ public:
     Select(std::initializer_list<Case> caseVec);
     template <typename ...T>
     Select(const std::string& name, T... caseVec);
+    template <typename T, typename std::enable_if<std::is_same_v<typename std::iterator_traits<T>::value_type, Case>, void>::type* = nullptr>
+    Select(const std::string& name, T begin, T end);
+    
 
 private:
-    void doSelect(std::initializer_list<Case> caseVec);
+    template <typename T>
+    void doSelect(const std::string &name, T begin, T end);
+    void doSelect(const std::string &name, std::initializer_list<Case> caseVec);
     friend class Case;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
     friend NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec);
@@ -149,17 +154,28 @@ void Case::exec(const Select* pSelect) {
 
 template <typename ...T>
 Select::Select(const std::string& name, T... caseVec) {
-    this->mName = name;
-    doSelect({caseVec...});
+    doSelect(name, {caseVec...});
 }
 
 Select::Select(std::initializer_list<Case> caseVec) {
-    doSelect(caseVec);
+    doSelect("", caseVec.begin(), caseVec.end());
 }
 
-void Select::doSelect(std::initializer_list<Case> caseVec)  {
-    for (auto &case_ : caseVec)
+template <typename T, typename std::enable_if<std::is_same_v<typename std::iterator_traits<T>::value_type, Case>, void>::type*>
+Select::Select(const std::string& name, T begin, T end) {
+    doSelect(name, begin, end);
+}
+
+void Select::doSelect(const std::string &name, std::initializer_list<Case> caseVec) {
+    doSelect(name, caseVec.begin(), caseVec.end());
+}
+
+template <typename T>
+void Select::doSelect(const std::string &name, T begin, T end)  {
+    this->mName = name;
+    for (auto it = begin; it != end; it++)
     {
+        auto &case_ = *it;
         if (mpChan2Case.find(case_.mpChan) != mpChan2Case.end())
             throw std::runtime_error("duplicated chan in same select");
         mpChan2Case[case_.mpChan] = case_;
