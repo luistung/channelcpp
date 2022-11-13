@@ -9,7 +9,7 @@ std::mt19937 engine(5);
 using namespace std;
 using namespace std::chrono_literals;
 using namespace chrono;
-using ChanPtr = std::shared_ptr<::Chan::Chan>;
+using ChanPtr = std::shared_ptr<::Channel::Chan>;
 
 std::vector<ChanPtr> sampleChan() {
     std::uniform_int_distribution<> uniformDist(1, 4);
@@ -17,7 +17,7 @@ std::vector<ChanPtr> sampleChan() {
     std::vector<ChanPtr> ret;
     for (int i = 0; i < chanNum; i++)
         ret.emplace_back(
-            new Chan::Chan{"chan" + std::to_string(i)}
+            new Channel::Chan{"chan" + std::to_string(i)}
             );
     return ret;
 }
@@ -34,7 +34,7 @@ std::chrono::milliseconds sampleSleep() {
     return ret;
 }
 
-using SelectInstance = vector<tuple<string, milliseconds, ::Chan::METHOD, Chan::Chan*>>;
+using SelectInstance = vector<tuple<string, milliseconds, ::Channel::METHOD, Channel::Chan*>>;
 
 SelectInstance sampleSelect(const std::string& name, const std::vector<ChanPtr>& chanVec) {
     SelectInstance ret;
@@ -42,7 +42,7 @@ SelectInstance sampleSelect(const std::string& name, const std::vector<ChanPtr>&
     {
         if (!sampleBernoulli())
             continue;
-        Chan::METHOD method = sampleBernoulli() ? ::Chan::METHOD::WRITE : ::Chan::METHOD::READ;
+        Channel::METHOD method = sampleBernoulli() ? ::Channel::METHOD::WRITE : ::Channel::METHOD::READ;
         ret.push_back(make_tuple(name, sampleSleep(), method, chan.get()));
     }
     return ret;
@@ -68,7 +68,7 @@ void doEmulate(const vector<SelectInstance>& selectInstances,
         res.insert(cur);
         return;
     }
-    map<pair<Chan::METHOD, Chan::Chan *>, vector<const SelectInstance *>> wait2selectIns;
+    map<pair<Channel::METHOD, Channel::Chan *>, vector<const SelectInstance *>> wait2selectIns;
     for (const SelectInstance* pSelectIns : cur) {
         for (auto& [name, _, method, pChan] : *pSelectIns) {
             wait2selectIns[make_pair(method, pChan)].push_back(pSelectIns);
@@ -79,7 +79,7 @@ void doEmulate(const vector<SelectInstance>& selectInstances,
     bool found = false;
     for (auto &[name, _, method, pChan] : *pSelectInstance)
     {
-        Chan::METHOD needMethod = (method == Chan::METHOD::READ ? Chan::METHOD::WRITE : Chan::METHOD::READ);
+        Channel::METHOD needMethod = (method == Channel::METHOD::READ ? Channel::METHOD::WRITE : Channel::METHOD::READ);
         auto key = make_pair(needMethod, pChan);
         if (wait2selectIns.find(key) != wait2selectIns.end()) {
             found = true;
@@ -97,14 +97,14 @@ void doEmulate(const vector<SelectInstance>& selectInstances,
     }
 }
 
-set<Chan::NamedStatus> emulate(const vector<SelectInstance>& selectInstances) {
+set<Channel::NamedStatus> emulate(const vector<SelectInstance>& selectInstances) {
     set<const SelectInstance *> cur;
     set<set<const SelectInstance *>> res;
     doEmulate(selectInstances, 0, cur, res);
 
-    set<Chan::NamedStatus> ret;
+    set<Channel::NamedStatus> ret;
     for (const set<const SelectInstance *> &selectInstanceSet : res) {
-        Chan::NamedStatus status;
+        Channel::NamedStatus status;
         for (const SelectInstance *pSelectInstance : selectInstanceSet) {
             for (auto& [name, _, method, pChan] : *pSelectInstance) {
                 status.emplace_back(name, method, pChan->getName());
@@ -115,10 +115,10 @@ set<Chan::NamedStatus> emulate(const vector<SelectInstance>& selectInstances) {
     return ret;
 }
 
-vector<Chan::NamedStatus> getInitNameStatus(const vector<SelectInstance>& selectInstances) {
-    vector<Chan::NamedStatus> ret;
+vector<Channel::NamedStatus> getInitNameStatus(const vector<SelectInstance>& selectInstances) {
+    vector<Channel::NamedStatus> ret;
     for (auto& selectInstance : selectInstances) {
-        Chan::NamedStatus namedStatus;
+        Channel::NamedStatus namedStatus;
         for (auto &[name, _, method, pChan] : selectInstance)
         {
             namedStatus.emplace_back(name, method, pChan->getName());
@@ -136,7 +136,7 @@ int main() {
         printNamedStatus(i);
     }
 
-    set<Chan::NamedStatus> emulateResult = emulate(testCase);
+    set<Channel::NamedStatus> emulateResult = emulate(testCase);
     std::cout << testCase.size() << " " << emulateResult.size() << std::endl;
     for (auto &i : emulateResult)
     {

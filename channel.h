@@ -12,7 +12,7 @@ void log(T... args) {
     printf(args...);
 }
 
-namespace Chan {
+namespace Channel {
 
 class Select;
 class Chan;
