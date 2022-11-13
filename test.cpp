@@ -34,10 +34,10 @@ std::chrono::milliseconds sampleSleep() {
     return ret;
 }
 
-using SwitchInstance = vector<tuple<string, milliseconds, ::Chan::METHOD, Chan::Chan*>>;
+using SelectInstance = vector<tuple<string, milliseconds, ::Chan::METHOD, Chan::Chan*>>;
 
-SwitchInstance sampleSwitch(const std::string& name, const std::vector<ChanPtr>& chanVec) {
-    SwitchInstance ret;
+SelectInstance sampleSelect(const std::string& name, const std::vector<ChanPtr>& chanVec) {
+    SelectInstance ret;
     for (ChanPtr chan : chanVec)
     {
         if (!sampleBernoulli())
@@ -48,65 +48,65 @@ SwitchInstance sampleSwitch(const std::string& name, const std::vector<ChanPtr>&
     return ret;
 }
 
-vector<SwitchInstance> sampleTestCase (const std::vector<ChanPtr>& chanVec) {
-    vector<SwitchInstance> ret;
+vector<SelectInstance> sampleTestCase (const std::vector<ChanPtr>& chanVec) {
+    vector<SelectInstance> ret;
     std::uniform_int_distribution<> uniformDist(1, 6);
-    int switchNum = uniformDist(engine);
-    for (int i = 0; i < switchNum; i++) {
-        string name = "Switch" + to_string(i);
-        ret.emplace_back(sampleSwitch(name, chanVec));
+    int selectNum = uniformDist(engine);
+    for (int i = 0; i < selectNum; i++) {
+        string name = "Select" + to_string(i);
+        ret.emplace_back(sampleSelect(name, chanVec));
     }
     return ret;
 }
 
-void doEmulate(const vector<SwitchInstance>& switchInstances, 
+void doEmulate(const vector<SelectInstance>& selectInstances, 
                 int pos,
-                set<const SwitchInstance*>& cur, //alive switch
-                set<set<const SwitchInstance*>>& res
+                set<const SelectInstance*>& cur, //alive select
+                set<set<const SelectInstance*>>& res
                 ) {
-    if (pos == switchInstances.size()) {
+    if (pos == selectInstances.size()) {
         res.insert(cur);
         return;
     }
-    map<pair<Chan::METHOD, Chan::Chan *>, vector<const SwitchInstance *>> wait2switchIns;
-    for (const SwitchInstance* pSwitchIns : cur) {
-        for (auto& [name, _, method, pChan] : *pSwitchIns) {
-            wait2switchIns[make_pair(method, pChan)].push_back(pSwitchIns);
+    map<pair<Chan::METHOD, Chan::Chan *>, vector<const SelectInstance *>> wait2selectIns;
+    for (const SelectInstance* pSelectIns : cur) {
+        for (auto& [name, _, method, pChan] : *pSelectIns) {
+            wait2selectIns[make_pair(method, pChan)].push_back(pSelectIns);
         }
     }
 
-    const SwitchInstance* pSwitchInstance = &switchInstances[pos];
+    const SelectInstance* pSelectInstance = &selectInstances[pos];
     bool found = false;
-    for (auto &[name, _, method, pChan] : *pSwitchInstance)
+    for (auto &[name, _, method, pChan] : *pSelectInstance)
     {
         Chan::METHOD needMethod = (method == Chan::METHOD::READ ? Chan::METHOD::WRITE : Chan::METHOD::READ);
         auto key = make_pair(needMethod, pChan);
-        if (wait2switchIns.find(key) != wait2switchIns.end()) {
+        if (wait2selectIns.find(key) != wait2selectIns.end()) {
             found = true;
-            for (const SwitchInstance* pMatchedSwitchInstance : wait2switchIns.at(key)) {
-                cur.erase(pMatchedSwitchInstance);
-                doEmulate(switchInstances, pos + 1, cur, res);
-                cur.insert(pMatchedSwitchInstance);
+            for (const SelectInstance* pMatchedSelectInstance : wait2selectIns.at(key)) {
+                cur.erase(pMatchedSelectInstance);
+                doEmulate(selectInstances, pos + 1, cur, res);
+                cur.insert(pMatchedSelectInstance);
             }
         }
     }
     if (!found) {
-        cur.insert(pSwitchInstance);
-        doEmulate(switchInstances, pos + 1, cur, res);
-        cur.erase(pSwitchInstance);
+        cur.insert(pSelectInstance);
+        doEmulate(selectInstances, pos + 1, cur, res);
+        cur.erase(pSelectInstance);
     }
 }
 
-set<Chan::NamedStatus> emulate(const vector<SwitchInstance>& switchInstances) {
-    set<const SwitchInstance *> cur;
-    set<set<const SwitchInstance *>> res;
-    doEmulate(switchInstances, 0, cur, res);
+set<Chan::NamedStatus> emulate(const vector<SelectInstance>& selectInstances) {
+    set<const SelectInstance *> cur;
+    set<set<const SelectInstance *>> res;
+    doEmulate(selectInstances, 0, cur, res);
 
     set<Chan::NamedStatus> ret;
-    for (const set<const SwitchInstance *> &switchInstanceSet : res) {
+    for (const set<const SelectInstance *> &selectInstanceSet : res) {
         Chan::NamedStatus status;
-        for (const SwitchInstance *pSwitchInstance : switchInstanceSet) {
-            for (auto& [name, _, method, pChan] : *pSwitchInstance) {
+        for (const SelectInstance *pSelectInstance : selectInstanceSet) {
+            for (auto& [name, _, method, pChan] : *pSelectInstance) {
                 status.emplace_back(name, method, pChan->getName());
             }
         }
@@ -115,11 +115,11 @@ set<Chan::NamedStatus> emulate(const vector<SwitchInstance>& switchInstances) {
     return ret;
 }
 
-vector<Chan::NamedStatus> getInitNameStatus(const vector<SwitchInstance>& switchInstances) {
+vector<Chan::NamedStatus> getInitNameStatus(const vector<SelectInstance>& selectInstances) {
     vector<Chan::NamedStatus> ret;
-    for (auto& switchInstance : switchInstances) {
+    for (auto& selectInstance : selectInstances) {
         Chan::NamedStatus namedStatus;
-        for (auto &[name, _, method, pChan] : switchInstance)
+        for (auto &[name, _, method, pChan] : selectInstance)
         {
             namedStatus.emplace_back(name, method, pChan->getName());
         }
@@ -131,7 +131,7 @@ vector<Chan::NamedStatus> getInitNameStatus(const vector<SwitchInstance>& switch
 int main() {
 
     std::vector<ChanPtr> chans = sampleChan();
-    vector<SwitchInstance> testCase = sampleTestCase(chans);
+    vector<SelectInstance> testCase = sampleTestCase(chans);
     for(auto &i : getInitNameStatus(testCase)) {
         printNamedStatus(i);
     }

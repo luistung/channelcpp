@@ -14,7 +14,7 @@ void log(T... args) {
 
 namespace Chan {
 
-class Switch;
+class Select;
 class Chan;
 
 enum METHOD
@@ -24,7 +24,7 @@ enum METHOD
 };
 
 using Task = std::function<bool(const std::string&, const std::string&, int)>;
-using Status = std::vector<std::tuple<Switch*, METHOD, Chan*>>;
+using Status = std::vector<std::tuple<Select*, METHOD, Chan*>>;
 using NamedStatus = std::vector<std::tuple<std::string, METHOD, std::string>>;
 
 class Case
@@ -36,23 +36,23 @@ public:
         mMethod(method), mpChan(pChan), mpVal(pVal), mpFunc(pFunc) {}
 
 private:
-    friend class Switch;
-    void exec(const Switch* pSwitch);
+    friend class Select;
+    void exec(const Select* pSelect);
     METHOD mMethod;
     Chan *mpChan;
     int *mpVal;
     Task mpFunc;
 };
 
-class Switch
+class Select
 {
 public:    
-    Switch(std::initializer_list<Case> caseVec);
+    Select(std::initializer_list<Case> caseVec);
     template <typename ...T>
-    Switch(const std::string& name, T... caseVec);
+    Select(const std::string& name, T... caseVec);
 
 private:
-    void doSwitch(std::initializer_list<Case> caseVec);
+    void doSelect(std::initializer_list<Case> caseVec);
     friend class Case;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
     friend NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec);
@@ -69,14 +69,14 @@ class Chan {
 public:
     Chan(const std::string& name = "") : mName(name) {};
 
-    void doWrite(const Switch* pSwitch, int *val)
+    void doWrite(const Select* pSelect, int *val)
     {
         std::unique_lock<std::mutex> lock(mMutex);
         mBuffer.push_back(*val);
         mCv.notify_one();
     }
 
-    int doRead(const Switch* pSwitch) {
+    int doRead(const Select* pSelect) {
         std::unique_lock<std::mutex> lock(mMutex);
         mCv.wait(lock, [&]
                  { return mBuffer.size() > 0; });
@@ -86,7 +86,7 @@ public:
     }
 
     void write(int *val, Task fun) {
-        Switch {
+        Select {
             mName,
             Case{
                 METHOD::WRITE,
@@ -98,7 +98,7 @@ public:
     }
 
     void read(int *val, Task fun) {
-        Switch{
+        Select{
             mName,
             Case{
                 METHOD::READ,
@@ -124,7 +124,7 @@ private:
     std::condition_variable mCv;
 
 public:
-    std::list<std::pair<Switch *, METHOD>> waitingSwitchList;
+    std::list<std::pair<Select *, METHOD>> waitingSelectList;
 };
 
 struct Coordinator
@@ -136,36 +136,36 @@ Coordinator gCoordinator;
 
 
 
-void Case::exec(const Switch* pSwitch) {
+void Case::exec(const Select* pSelect) {
     if (mMethod == READ)
     {
-        *mpVal = mpChan->doRead(pSwitch);
+        *mpVal = mpChan->doRead(pSelect);
     }
     else {
-        mpChan->doWrite(pSwitch, mpVal);
+        mpChan->doWrite(pSelect, mpVal);
     }
-    mpFunc(pSwitch->mName, mpChan->mName, *mpVal);
+    mpFunc(pSelect->mName, mpChan->mName, *mpVal);
 }
 
 template <typename ...T>
-Switch::Switch(const std::string& name, T... caseVec) {
+Select::Select(const std::string& name, T... caseVec) {
     this->mName = name;
-    doSwitch({caseVec...});
+    doSelect({caseVec...});
 }
 
-Switch::Switch(std::initializer_list<Case> caseVec) {
-    doSwitch(caseVec);
+Select::Select(std::initializer_list<Case> caseVec) {
+    doSelect(caseVec);
 }
 
-void Switch::doSwitch(std::initializer_list<Case> caseVec)  {
+void Select::doSelect(std::initializer_list<Case> caseVec)  {
     for (auto &case_ : caseVec)
     {
         if (mpChan2Case.find(case_.mpChan) != mpChan2Case.end())
-            throw std::runtime_error("duplicated chan in same switch");
+            throw std::runtime_error("duplicated chan in same select");
         mpChan2Case[case_.mpChan] = case_;
     }
 
-    Switch *pSwitch = nullptr;
+    Select *pSelect = nullptr;
     Case *pCase = nullptr;
     bool hasWaiter = false;
     {
@@ -176,17 +176,17 @@ void Switch::doSwitch(std::initializer_list<Case> caseVec)  {
             
             if (pCase->mMethod == READ)
             { 
-                if (!pCase->mpChan->waitingSwitchList.empty() && pCase->mpChan->waitingSwitchList.back().second == WRITE) {
-                    pSwitch = pCase->mpChan->waitingSwitchList.back().first; // remove blocked switch
-                    pCase->mpChan->waitingSwitchList.pop_back();
+                if (!pCase->mpChan->waitingSelectList.empty() && pCase->mpChan->waitingSelectList.back().second == WRITE) {
+                    pSelect = pCase->mpChan->waitingSelectList.back().first; // remove blocked select
+                    pCase->mpChan->waitingSelectList.pop_back();
                     hasWaiter = true;
                     break;
                 }
             }
             else if (pCase->mMethod == WRITE) {               
-                if (!pCase->mpChan->waitingSwitchList.empty() && pCase->mpChan->waitingSwitchList.front().second == READ) {
-                    pSwitch = pCase->mpChan->waitingSwitchList.front().first;
-                    pCase->mpChan->waitingSwitchList.pop_front();
+                if (!pCase->mpChan->waitingSelectList.empty() && pCase->mpChan->waitingSelectList.front().second == READ) {
+                    pSelect = pCase->mpChan->waitingSelectList.front().first;
+                    pCase->mpChan->waitingSelectList.pop_front();
                     hasWaiter = true;
                     break;
                 }
@@ -202,7 +202,7 @@ void Switch::doSwitch(std::initializer_list<Case> caseVec)  {
                     continue;
                 
                 auto &case_ = pChan2CasePair.second;
-                case_.mpChan->waitingSwitchList.remove_if([=](auto &a)
+                case_.mpChan->waitingSelectList.remove_if([=](auto &a)
                                                                         { return a.first == this;});
             }
         }
@@ -211,8 +211,8 @@ void Switch::doSwitch(std::initializer_list<Case> caseVec)  {
     if (hasWaiter) {
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            pSwitch->mpChanTobeNotified = pCase->mpChan;
-            pSwitch->mCv.notify_one();
+            pSelect->mpChanTobeNotified = pCase->mpChan;
+            pSelect->mCv.notify_one();
         }
         pCase->exec(this);
         return;
@@ -225,10 +225,10 @@ void Switch::doSwitch(std::initializer_list<Case> caseVec)  {
             
             auto &case_ = pChan2CasePair.second;
             if (case_.mMethod == READ) {
-                case_.mpChan->waitingSwitchList.emplace_front(this, READ);
+                case_.mpChan->waitingSelectList.emplace_front(this, READ);
             }
             else {
-                case_.mpChan->waitingSwitchList.emplace_back(this, WRITE);
+                case_.mpChan->waitingSelectList.emplace_back(this, WRITE);
             }
         }
     } //gLock
@@ -250,8 +250,8 @@ Status watchStatus(const std::vector<Chan*>& chanVec) {
     Status ret;
     for (auto &pChan : chanVec)
     {
-        for (auto& [pSwitch, method] : pChan->waitingSwitchList) {
-            ret.emplace_back(pSwitch, method, pChan);
+        for (auto& [pSelect, method] : pChan->waitingSelectList) {
+            ret.emplace_back(pSelect, method, pChan);
         }
     }
     return ret;
@@ -262,8 +262,8 @@ NamedStatus watchNamedStatus(const std::vector<Chan*>& chanVec) {
     NamedStatus ret;
     for (auto &pChan : chanVec)
     {
-        for (auto& [pSwitch, method] : pChan->waitingSwitchList) {
-            ret.emplace_back(pSwitch->mName, method, pChan->mName);
+        for (auto& [pSelect, method] : pChan->waitingSelectList) {
+            ret.emplace_back(pSelect->mName, method, pChan->mName);
         }
     }
     return ret;
@@ -271,18 +271,18 @@ NamedStatus watchNamedStatus(const std::vector<Chan*>& chanVec) {
 
 void printStatus(const Status& status) {
     printf("======================================\n");
-    for (auto &[pSwitch, method, pChan] : status)
+    for (auto &[pSelect, method, pChan] : status)
     {
-        printf("---%s\t%s\t%s---\n", pSwitch->mName.c_str(), method == METHOD::READ ? "read" : "write", pChan->mName.c_str());
+        printf("---%s\t%s\t%s---\n", pSelect->mName.c_str(), method == METHOD::READ ? "read" : "write", pChan->mName.c_str());
     }
     printf("======================================\n");
 }
 
 void printNamedStatus(const NamedStatus& status) {
     printf("======================================\n");
-    for (auto &[switchName, method, chanName] : status)
+    for (auto &[selectName, method, chanName] : status)
     {
-        printf("---%s\t%s\t%s---\n", switchName.c_str(), method == METHOD::READ ? "read" : "write", chanName.c_str());
+        printf("---%s\t%s\t%s---\n", selectName.c_str(), method == METHOD::READ ? "read" : "write", chanName.c_str());
     }
     printf("======================================\n");
 }
