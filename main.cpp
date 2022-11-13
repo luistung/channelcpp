@@ -1,4 +1,4 @@
-#include <cpp_channel.h>
+#include <channel.h>
 
 Chan::Chan chan1{"chan1"}, chan2{"chan2"};
 std::vector<Chan::Chan*> chanVec{&chan1, &chan2};

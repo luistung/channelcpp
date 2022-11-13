@@ -1,4 +1,4 @@
-#include <cpp_channel.h>
+#include <channel.h>
 #include <random>
 #include <set>
 
