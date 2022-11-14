@@ -5,6 +5,8 @@
 #include <future>
 #include <functional>
 #include <iostream>
+#include <set>
+
 using namespace std::chrono_literals;
 
 template<typename... T>
@@ -25,7 +27,7 @@ enum METHOD
 
 using Task = std::function<bool(const std::string&, const std::string&, int)>;
 using Status = std::vector<std::tuple<Select*, METHOD, Chan*>>;
-using NamedStatus = std::vector<std::tuple<std::string, METHOD, std::string>>;
+using NamedStatus = std::set<std::tuple<std::string, METHOD, std::string>>;
 
 class Case
 {
@@ -78,7 +80,7 @@ public:
     {
         std::unique_lock<std::mutex> lock(mMutex);
         mBuffer.push_back(*val);
-        mCv.notify_one();
+        mCv.notify_all();
     }
 
     int doRead(const Select* pSelect) {
@@ -213,13 +215,11 @@ void Select::doSelect(const std::string &name, T begin, T end)  {
         if (hasWaiter)
         {
             //de-register
-            for (auto& pChan2CasePair : mpChan2Case) {
-                if (pChan2CasePair.first == pCase->mpChan)
-                    continue;
-                
-                auto &case_ = pChan2CasePair.second;
-                case_.mpChan->waitingSelectList.remove_if([=](auto &a)
-                                                                        { return a.first == this;});
+            
+            for (auto& pChan2CasePair : pSelect->mpChan2Case) {
+                Chan *pChan = pChan2CasePair.first;
+                pChan->waitingSelectList.remove_if([=](std::pair<Select *, METHOD> &a)
+                                                   {return a.first == pSelect; });
             }
         }
 
@@ -228,7 +228,7 @@ void Select::doSelect(const std::string &name, T begin, T end)  {
         {
             std::unique_lock<std::mutex> lock(mMutex);
             pSelect->mpChanTobeNotified = pCase->mpChan;
-            pSelect->mCv.notify_one();
+            pSelect->mCv.notify_all();
         }
         pCase->exec(this);
         return;
@@ -278,8 +278,10 @@ NamedStatus watchNamedStatus(const std::vector<Chan*>& chanVec) {
     NamedStatus ret;
     for (auto &pChan : chanVec)
     {
-        for (auto& [pSelect, method] : pChan->waitingSelectList) {
-            ret.emplace_back(pSelect->mName, method, pChan->mName);
+        
+        for (auto &[pSelect, method] : pChan->waitingSelectList)
+        {
+            ret.insert(make_tuple(pSelect->mName, method, pChan->mName));
         }
     }
     return ret;
