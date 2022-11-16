@@ -6,6 +6,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <any>
 
 using namespace std::chrono_literals;
 
@@ -20,7 +21,7 @@ class Chan;
 
 enum METHOD { READ, WRITE };
 
-using Task = std::function<bool(const std::string &, const std::string &, int)>;
+using Task = std::function<bool(const std::string &, const std::string &, const std::any&)>;
 using Status = std::vector<std::tuple<Select *, METHOD, Chan *>>;
 using NamedStatus = std::set<std::tuple<std::string, METHOD, std::string>>;
 
@@ -28,7 +29,7 @@ class Case {
   public:
     Case() = default;
     Case(const Case &case_) = default;
-    Case(METHOD method, Chan *pChan, int *pVal, Task pFunc)
+    Case(METHOD method, Chan *pChan, std::any pVal, Task pFunc)
         : mMethod(method), mpChan(pChan), mpVal(pVal), mpFunc(pFunc) {}
 
   private:
@@ -36,7 +37,7 @@ class Case {
     void exec(const Select *pSelect);
     METHOD mMethod;
     Chan *mpChan;
-    int *mpVal;
+    std::any mpVal;
     Task mpFunc;
 };
 
@@ -70,18 +71,19 @@ class Chan {
   public:
     Chan(const std::string &name = "") : mName(name) {};
 
-    void doWrite(const Select *pSelect, int *val) {
+
+    void doWrite(const Select *pSelect, std::any& val) {
         std::unique_lock<std::mutex> lock(mMutex);
-        mBuffer.push_back(*val);
+        mBuffer.push_back(val);
         mCv.notify_all();
     }
 
-    int doRead(const Select *pSelect) {
+    void doRead(const Select *pSelect, std::any& val) {
         std::unique_lock<std::mutex> lock(mMutex);
         mCv.wait(lock, [&] { return mBuffer.size() > 0; });
-        int val = mBuffer.back();
+        val = mBuffer.back();
         mBuffer.pop_back();
-        return val;
+
     }
 
     void write(int *val, Task fun) {
@@ -103,7 +105,7 @@ class Chan {
     friend void printStatus(const Status &status);
     std::string mName;
 
-    std::vector<int> mBuffer;
+    std::vector<std::any> mBuffer;
 
     std::mutex mMutex; // protect mBuffer
     std::condition_variable mCv;
@@ -120,11 +122,11 @@ Coordinator gCoordinator;
 
 void Case::exec(const Select *pSelect) {
     if (mMethod == READ) {
-        *mpVal = mpChan->doRead(pSelect);
+        mpChan->doRead(pSelect, mpVal);
     } else {
         mpChan->doWrite(pSelect, mpVal);
     }
-    mpFunc(pSelect->mName, mpChan->mName, *mpVal);
+    mpFunc(pSelect->mName, mpChan->mName, mpVal);
 }
 
 template <typename... T> Select::Select(const std::string &name, T... caseVec) {

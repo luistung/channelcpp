@@ -1,17 +1,18 @@
 #include <channel.h>
+using namespace std;
 
 Channel::Chan chan1{"chan1"}, chan2{"chan2"};
 std::vector<Channel::Chan*> chanVec{&chan1, &chan2};
 
 Channel::Task taskWrite = [](const std::string& selectName, const std::string& chanName,
-int a) {
-    log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), a);
+const std::any& a) {
+    log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
     return true;
 };
 
 Channel::Task taskRead = [](const std::string& selectName, const std::string& chanName,
-int a) {
-    log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), a);
+const std::any& a) {
+    log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
     return true;
 };
 
@@ -20,8 +21,8 @@ void fun() {
     int a = 10;
 
     chan1.write(&a,
-    [](const std::string& selectName, const std::string& chanName, int a) {
-        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), a);
+    [](const std::string& selectName, const std::string& chanName, const std::any& a) {
+        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
         return true;
     }
                );
@@ -30,7 +31,6 @@ void fun() {
 
 
 int main() {
-
     int a, b;
     std::thread t([&]() {
         fun();
