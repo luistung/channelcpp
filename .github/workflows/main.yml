@@ -1,0 +1,17 @@
+name: notebook
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: format
+      shell: bash
+      run: |
+        make format
