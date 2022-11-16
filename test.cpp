@@ -45,7 +45,8 @@ SelectInstance sampleSelect(std::mt19937& engine, const std::string& name, const
         if (!sampleBernoulli(engine))
             continue;
         Channel::METHOD method = sampleBernoulli(engine) ? ::Channel::METHOD::WRITE : ::Channel::METHOD::READ;
-        ret.second.push_back(make_tuple(sampleSleep(engine), method, pChan, make_shared<int>(0)));
+        int val = std::uniform_int_distribution<>(0, 99)(engine);
+        ret.second.push_back(make_tuple(sampleSleep(engine), method, pChan, make_shared<int>(val)));
     }
     return ret;
 }
