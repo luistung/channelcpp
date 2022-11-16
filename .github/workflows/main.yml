@@ -5,5 +5,3 @@ on:
     branches:
       - master
   workflow_dispatch:
-
-jobs:
