@@ -29,10 +29,18 @@ class Case {
   public:
     Case() = default;
     Case(const Case &case_) = default;
-    Case(METHOD method, Chan *pChan, std::any pVal, Task pFunc)
-        : mMethod(method), mpChan(pChan), mpVal(pVal), mpFunc(pFunc) {}
+    template <typename T>
+    Case(
+        METHOD method, Chan *pChan, T *pVal,
+        std::function<bool(const std::string &, const std::string &, const T &)>
+            pFunc)
+        : mMethod(method),
+          mpChan(pChan),
+          mpVal(pVal),
+          mpFunc([=](const std::string & a, const std::string &b,
+                    const std::any &val) -> bool { return pFunc(a, b, *std::any_cast<T*>(val)); }) {}
 
-  private:
+   private:
     friend class Select;
     void exec(const Select *pSelect);
     METHOD mMethod;
@@ -86,11 +94,13 @@ class Chan {
 
     }
 
-    void write(int *val, Task fun) {
+    template <typename T>
+    void write(int *val, std::function<bool(const std::string &, const std::string &, const T&)> fun) {
         Select{mName, Case{METHOD::WRITE, this, val, fun}};
     }
 
-    void read(int *val, Task fun) {
+    template <typename T>
+    void read(int *val, std::function<bool(const std::string &, const std::string &, const T&)> fun) {
         Select{mName, Case{METHOD::READ, this, val, fun}};
     }
 

@@ -149,11 +149,11 @@ vector<Channel::NamedStatus> getInitNameStatus(TestCase& selectInstances) {
     return ret;
 }
 
-auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> Channel::Task {
+auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> std::function<bool(const std::string&, const std::string&, const int&)> {
     auto retFun = [=](const std::string &selectName, const std::string &chanName,
-    const any& a) {
+    const int& a) {
         this_thread::sleep_for(sleepTime);
-        log("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), *any_cast<int*>(a));
+        log("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), a);
         return true;
     };
     return retFun;
