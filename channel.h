@@ -7,6 +7,7 @@
 #include <set>
 #include <vector>
 #include <any>
+#include <queue>
 
 using namespace std::chrono_literals;
 
@@ -35,6 +36,7 @@ class Case {
   private:
     friend class Select;
     void exec(const Select *pSelect);
+    bool tryExec(const Select *pSelect);
     METHOD mMethod;
     Chan *mpChan;
     std::any mpVal;
@@ -70,20 +72,65 @@ class Select {
 class Chan {
   public:
     Chan(const std::string &name = "") : mName(name) {};
+    Chan(int size, const std::string &name = "") : mSize(size), mName(name) {};
 
 
     void doWrite(const Select *pSelect, std::any& val) {
         std::unique_lock<std::mutex> lock(mMutex);
-        mBuffer.push_back(val);
+
+        mPayload = val;
+        if (isBuffered()) bufferPush();
         mCv.notify_all();
     }
 
     void doRead(const Select *pSelect, std::any& val) {
         std::unique_lock<std::mutex> lock(mMutex);
-        mCv.wait(lock, [&] { return mBuffer.size() > 0; });
-        val = mBuffer.back();
-        mBuffer.pop_back();
+        mCv.wait(lock, [&] { return isBuffered() ? !empty() : mPayload.has_value(); });
+        if (isBuffered()) bufferPop();
+        val.swap(mPayload);
+        mPayload.reset();
 
+    }
+
+    bool tryWrite(const Select *pSelect, std::any& val) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        if (full()) {
+            return false;
+        }
+        mPayload = val;
+        if (isBuffered()) bufferPush();
+        return true;
+    }
+
+    bool tryRead(const Select *pSelect, std::any& val) {
+        std::unique_lock<std::mutex> lock(mMutex);
+        if (empty()) {
+            return false;
+        }
+        if (isBuffered()) bufferPop();
+        val.swap(mPayload);
+        mPayload.reset();
+        return true;
+    }
+
+    void bufferPush() {
+        mBuffer.push(mPayload);
+        mPayload.reset();
+    }
+
+    void bufferPop() {
+        mPayload = mBuffer.front();
+        mBuffer.pop();
+    }
+
+    bool empty() {
+        return mBuffer.size() == 0;
+    }
+    bool full() {
+        return mBuffer.size() >= mSize;
+    }
+    bool isBuffered() {
+        return mSize > 0;
     }
 
     void write(int *val, Task fun) {
@@ -100,12 +147,15 @@ class Chan {
 
   private:
     friend class Case;
+    friend class Select;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
     friend NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec);
     friend void printStatus(const Status &status);
     std::string mName;
 
-    std::vector<std::any> mBuffer;
+    std::queue<std::any> mBuffer{};
+    int mSize{0};
+    std::any mPayload;
 
     std::mutex mMutex; // protect mBuffer
     std::condition_variable mCv;
@@ -127,6 +177,19 @@ void Case::exec(const Select *pSelect) {
         mpChan->doWrite(pSelect, mpVal);
     }
     mpFunc(pSelect->mName, mpChan->mName, mpVal);
+}
+
+bool Case::tryExec(const Select *pSelect) {
+    //bool flag = (mMethod == READ) ? mpChan->tryRead(pSelect, mpVal)
+    //                              : mpChan->tryWrite(pSelect, mpVal);
+    bool flag = false;
+    if (mMethod == READ) {
+        flag = mpChan->tryRead(pSelect, mpVal);
+    } else
+        flag = mpChan->tryWrite(pSelect, mpVal);
+    if (!flag) return false;
+    mpFunc(pSelect->mName, mpChan->mName, mpVal);
+    return true;
 }
 
 template <typename... T> Select::Select(const std::string &name, T... caseVec) {
@@ -169,27 +232,30 @@ void Select::doSelect(const std::string &name, T begin, T end) {
         std::unique_lock<std::mutex> gLock(gCoordinator.mMutex);
         for (auto &pChan2CasePair : mpChan2Case) {
             pCase = &pChan2CasePair.second;
+            Chan *pChan = pCase->mpChan;
+
 
             if (pCase->mMethod == READ) {
-                if (!pCase->mpChan->waitingSelectList.empty() &&
-                        pCase->mpChan->waitingSelectList.back().second == WRITE) {
-                    pSelect = pCase->mpChan->waitingSelectList.back()
+                if (!pChan->waitingSelectList.empty() &&
+                        pChan->waitingSelectList.back().second == WRITE) {
+                    pSelect = pChan->waitingSelectList.back()
                               .first; // remove blocked select
-                    pCase->mpChan->waitingSelectList.pop_back();
+                    pChan->waitingSelectList.pop_back();
                     hasWaiter = true;
                     break;
                 }
             } else if (pCase->mMethod == WRITE) {
-                if (!pCase->mpChan->waitingSelectList.empty() &&
-                        pCase->mpChan->waitingSelectList.front().second == READ) {
-                    pSelect = pCase->mpChan->waitingSelectList.front().first;
-                    pCase->mpChan->waitingSelectList.pop_front();
+                if (!pChan->waitingSelectList.empty() &&
+                        pChan->waitingSelectList.front().second == READ) {
+                    pSelect = pChan->waitingSelectList.front().first;
+                    pChan->waitingSelectList.pop_front();
                     hasWaiter = true;
                     break;
                 }
             }
 
         } // for
+
 
         if (hasWaiter) {
             // de-register peer
@@ -202,7 +268,19 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                 });
             }
         }
-        if (!hasWaiter) { // register
+
+
+        if (!hasWaiter) {
+            for (auto &pChan2CasePair : mpChan2Case) {
+                pCase = &pChan2CasePair.second;
+                Chan *pChan = pCase->mpChan;
+                if (pChan->isBuffered()) {
+                    if (pCase->tryExec(this)) {
+                        return;
+                    }
+                }
+            }
+            // register self
             for (auto &pChan2CasePair : mpChan2Case) {
                 auto &case_ = pChan2CasePair.second;
                 if (case_.mMethod == READ) {
@@ -218,12 +296,12 @@ void Select::doSelect(const std::string &name, T begin, T end) {
         {
             std::unique_lock<std::mutex> lock(mMutex);
             pSelect->mpChanTobeNotified = pCase->mpChan;
-            pSelect->mCv.notify_all();
         }
         pCase->exec(this);
+        pSelect->mCv.notify_all();
         return;
     }
-    
+
 
 
     // std::cout << std::this_thread::get_id() << ":###" << std::endl;
