@@ -192,7 +192,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
         } // for
 
         if (hasWaiter) {
-            // de-register
+            // de-register peer
 
             for (auto &pChan2CasePair : pSelect->mpChan2Case) {
                 Chan *pChan = pChan2CasePair.first;
@@ -200,6 +200,16 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                 [=](std::pair<Select *, METHOD> &a) {
                     return a.first == pSelect;
                 });
+            }
+        }
+        if (!hasWaiter) { // register
+            for (auto &pChan2CasePair : mpChan2Case) {
+                auto &case_ = pChan2CasePair.second;
+                if (case_.mMethod == READ) {
+                    case_.mpChan->waitingSelectList.emplace_front(this, READ);
+                } else {
+                    case_.mpChan->waitingSelectList.emplace_back(this, WRITE);
+                }
             }
         }
 
@@ -213,19 +223,8 @@ void Select::doSelect(const std::string &name, T begin, T end) {
         pCase->exec(this);
         return;
     }
+    
 
-    // register
-    {
-        std::unique_lock<std::mutex> gLock(gCoordinator.mMutex);
-        for (auto &pChan2CasePair : mpChan2Case) {
-            auto &case_ = pChan2CasePair.second;
-            if (case_.mMethod == READ) {
-                case_.mpChan->waitingSelectList.emplace_front(this, READ);
-            } else {
-                case_.mpChan->waitingSelectList.emplace_back(this, WRITE);
-            }
-        }
-    } // gLock
 
     // std::cout << std::this_thread::get_id() << ":###" << std::endl;
     std::unique_lock<std::mutex> lock(mMutex);
