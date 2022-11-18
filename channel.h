@@ -145,7 +145,9 @@ class Chan {
         return mName;
     }
 
-  private:
+    size_t getSize() { return mSize; }
+
+   private:
     friend class Case;
     friend class Select;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
@@ -295,7 +297,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
     } // gLock
     if (hasWaiter) {
         {
-            std::unique_lock<std::mutex> lock(mMutex);
+            std::unique_lock<std::mutex> lock(pSelect->mMutex);
             pSelect->mpChanTobeNotified = pCase->mpChan;
         }
         pSelect->mCv.notify_all();
@@ -349,6 +351,14 @@ void printNamedStatus(const NamedStatus &status) {
     for (auto &[selectName, method, chanName] : status) {
         printf("---%s\t%s\t%s---\n", selectName.c_str(),
                method == METHOD::READ ? "read" : "write", chanName.c_str());
+    }
+    printf("======================================\n");
+}
+
+void printChannel(const std::vector<Channel::Chan *>& chanVec) {
+    printf("======================================\n");
+    for (Channel::Chan *chan : chanVec) {
+        printf("---%s\t%d---\n", chan->getName().c_str(), static_cast<int>(chan->getSize()));
     }
     printf("======================================\n");
 }
