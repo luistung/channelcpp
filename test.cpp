@@ -153,7 +153,7 @@ auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> Chan
     auto retFun = [=](const std::string &selectName, const std::string &chanName,
     const any& a) {
         this_thread::sleep_for(sleepTime);
-        log("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), *any_cast<int*>(a));
+        log("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     };
     return retFun;
@@ -167,7 +167,7 @@ Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, con
         for (const tuple<microseconds, ::Channel::METHOD, Channel::Chan *, shared_ptr<int>> &caseTup : selectInstance.second) {
             microseconds caseSleepTime = get<0>(caseTup);
             Channel::METHOD method = get<1>(caseTup);
-            caseVec.emplace_back(method, get<2>(caseTup), get<3>(caseTup).get(), taskFun(microseconds(0), method));
+            caseVec.emplace_back(method, get<2>(caseTup), get<3>(caseTup), taskFun(microseconds(0), method));
         }
         auto threadFun = [](string selectName, std::vector<Channel::Case> caseVec, microseconds selectSleepTime) {
             this_thread::sleep_for(selectSleepTime);

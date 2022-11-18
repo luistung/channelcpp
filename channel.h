@@ -133,11 +133,11 @@ class Chan {
         return mSize > 0;
     }
 
-    void write(int *val, Task fun) {
+    void write(std::any val, Task fun) {
         Select{mName, Case{METHOD::WRITE, this, val, fun}};
     }
 
-    void read(int *val, Task fun) {
+    void read(std::any val, Task fun) {
         Select{mName, Case{METHOD::READ, this, val, fun}};
     }
 
@@ -271,6 +271,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
 
 
         if (!hasWaiter) {
+            
             for (auto &pChan2CasePair : mpChan2Case) {
                 pCase = &pChan2CasePair.second;
                 Chan *pChan = pCase->mpChan;
@@ -279,7 +280,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                         return;
                     }
                 }
-            }
+            }          
             // register self
             for (auto &pChan2CasePair : mpChan2Case) {
                 auto &case_ = pChan2CasePair.second;
@@ -297,21 +298,17 @@ void Select::doSelect(const std::string &name, T begin, T end) {
             std::unique_lock<std::mutex> lock(mMutex);
             pSelect->mpChanTobeNotified = pCase->mpChan;
         }
-        pCase->exec(this);
         pSelect->mCv.notify_all();
+        pCase->exec(this);
         return;
     }
 
 
 
-    // std::cout << std::this_thread::get_id() << ":###" << std::endl;
     std::unique_lock<std::mutex> lock(mMutex);
     mCv.wait(lock, [=]() {
-        // std::cout << std::this_thread::get_id() << ":" << mpChanTobeNotified <<
-        // std::endl;
         return mpChanTobeNotified != nullptr;
     });
-    // std::cout << std::this_thread::get_id() << ":###" << std::endl;
 
     mpChan2Case[mpChanTobeNotified].exec(this);
 }

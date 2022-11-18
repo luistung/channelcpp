@@ -69,27 +69,27 @@ Channel::Chan bchan1{1, "bchan1"}, bchan2{1, "bchan2"};
 std::vector<Channel::Chan*> chanVec2{&bchan1, &bchan2};
 void fun3() {
     std::this_thread::sleep_for(0s);
-    int a = 10, b = 20;
+    shared_ptr<int> a = make_shared<int>(10), b = make_shared<int>(20);
 
-    bchan1.write(&a,
+    bchan1.write(a,
     [](const std::string& selectName, const std::string& chanName, const std::any& a) {
-        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
+        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     }
                 );
-    bchan1.write(&b, [](const std::string& selectName,
+    bchan1.write(b, [](const std::string& selectName,
     const std::string& chanName, const std::any& a) {
-        log("%s:write:%s\n", selectName.c_str(), chanName.c_str());
+        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     });
 }
 
 void fun4() {
-    int a = 0;
-    bchan1.read(&a, [](const std::string& selectName,
-    const std::string& chanName, const std::any& a) {
+    shared_ptr<int> a;
+    bchan1.read(a, [](const std::string& selectName,
+                       const std::string& chanName, const std::any& a) {
         //log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
-        log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
+        log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
 
         return true;
     });
@@ -97,11 +97,13 @@ void fun4() {
 
 int testBuffered() {
     std::thread t([&]() {
-        fun3();
+        std::this_thread::sleep_for(1s);
+        fun3(); //write
     });
-    std::this_thread::sleep_for(1s);
+    
     std::thread t2([&]() {
-        fun4();
+        
+        fun4(); //read
     });
 
     t2.join();
@@ -110,6 +112,7 @@ int testBuffered() {
 }
 
 int main() {
+    testNonBuffered();
     testBuffered();
     return 0;
 }
