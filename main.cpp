@@ -1,8 +1,6 @@
 #include <channel.h>
 using namespace std;
 
-Channel::Chan chan1{"chan1"}, chan2{"chan2"};
-std::vector<Channel::Chan*> chanVec{&chan1, &chan2};
 
 Channel::Task taskWrite = [](const std::string& selectName, const std::string& chanName,
 const std::any& a) {
@@ -16,11 +14,11 @@ const std::any& a) {
     return true;
 };
 
-void fun() {
+void fun(std::vector<Channel::Chan*>& chanVec) {
     std::this_thread::sleep_for(0s);
     shared_ptr<int> a = make_shared<int>(10);
 
-    chan1.write(a,
+    chanVec[0]->write(a,
     [](const std::string& selectName, const std::string& chanName, const std::any& a) {
         LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
@@ -28,19 +26,19 @@ void fun() {
                );
 
 }
-void fun2() {
+void fun2(std::vector<Channel::Chan*>& chanVec) {
     shared_ptr<int> a = make_shared<int>(20), b=make_shared<int>(30);
     Channel::Select{
         "select1",
         Channel::Case{
             Channel::METHOD::READ,
-            &chan1,
+            chanVec[0],
             a,
             taskRead
         },
         Channel::Case{
             Channel::METHOD::WRITE,
-            &chan2,
+            chanVec[1],
             b,
             taskWrite
         }
@@ -50,12 +48,14 @@ void fun2() {
 
 
 int testNonBuffered() {
+    Channel::Chan chan1{"chan1"}, chan2{"chan2"};
+    std::vector<Channel::Chan*> chanVec{&chan1, &chan2};
 
     std::thread t([&]() {
-        fun();
+        fun(chanVec);
     });
     std::thread t2([&]() {
-        fun2();
+        fun2(chanVec);
     });
     std::this_thread::sleep_for(1s);
     printStatus(Channel::watchStatus(chanVec));
@@ -65,28 +65,27 @@ int testNonBuffered() {
     return 0;
 }
 
-Channel::Chan bchan1{1, "bchan1"}, bchan2{1, "bchan2"};
-std::vector<Channel::Chan*> chanVec2{&bchan1, &bchan2};
-void fun3() {
+
+void fun3(std::vector<Channel::Chan*>& chanVec) {
     std::this_thread::sleep_for(0s);
     shared_ptr<int> a = make_shared<int>(10), b = make_shared<int>(20);
 
-    bchan1.write(a,
+    chanVec[0]->write(a,
     [](const std::string& selectName, const std::string& chanName, const std::any& a) {
         LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     }
                 );
-    bchan1.write(b, [](const std::string& selectName,
+    chanVec[0]->write(b, [](const std::string& selectName,
     const std::string& chanName, const std::any& a) {
         LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     });
 }
 
-void fun4() {
+void fun4(std::vector<Channel::Chan*>& chanVec) {
     shared_ptr<int> a;
-    bchan1.read(a, [](const std::string& selectName,
+    chanVec[0]->read(a, [](const std::string& selectName,
                        const std::string& chanName, const std::any& a) {
         LOG("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(),
             *any_cast<shared_ptr<int>>(a));
@@ -96,14 +95,16 @@ void fun4() {
 }
 
 int testBuffered() {
+    Channel::Chan bchan1{1, "bchan1"}, bchan2{1, "bchan2"};
+    std::vector<Channel::Chan*> chanVec{&bchan1, &bchan2};
     std::thread t([&]() {
         std::this_thread::sleep_for(1s);
-        fun3(); //write
+        fun3(chanVec); //write
     });
     
     std::thread t2([&]() {
         
-        fun4(); //read
+        fun4(chanVec); //read
     });
 
     t2.join();
@@ -111,8 +112,36 @@ int testBuffered() {
     return 0;
 }
 
+void fun5(std::vector<Channel::Chan*>& chanVec) {
+    shared_ptr<int> a = make_shared<int>(20);
+    Channel::Select{
+        "select1",
+        Channel::Case{
+            Channel::METHOD::READ,
+            chanVec[0],
+            a,
+            taskRead
+        },
+        Channel::Default{
+        }
+    };
+}
+
+int testDefault() {
+    Channel::Chan bchan1{0, "bchan1"};
+    std::vector<Channel::Chan*> chanVec{&bchan1};
+    std::thread t([&]() {
+        std::this_thread::sleep_for(1s);
+        fun5(chanVec); //write
+    });
+
+    t.join();
+    return 0;
+}
+
 int main() {
     testNonBuffered();
     testBuffered();
+    testDefault();
     return 0;
 }

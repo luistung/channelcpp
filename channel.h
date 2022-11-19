@@ -40,10 +40,11 @@ class Case {
     void exec(const Select *pSelect);
     bool tryExec(const Select *pSelect);
     METHOD mMethod;
-    Chan *mpChan;
+    Chan *mpChan = nullptr;
     std::any mpVal;
     Task mpFunc;
 };
+using Default = Case;
 
 class Select {
   public:
@@ -218,8 +219,14 @@ void Select::doSelect(const std::string &name,
 template <typename T>
 void Select::doSelect(const std::string &name, T begin, T end) {
     this->mName = name;
+    bool hasDefault = false;
     for (auto it = begin; it != end; it++) {
         auto &case_ = *it;
+        if (case_.mpChan==nullptr) {
+            if (it != end -1) throw std::runtime_error("default must be at the end");
+            hasDefault = true;
+            continue;
+        }
         if (mpChan2Case.find(case_.mpChan) != mpChan2Case.end()) {
             throw std::runtime_error("duplicated chan in same select");
         }
@@ -285,7 +292,9 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                         return;
                     }
                 }
-            }          
+            }
+            //not have buffered data
+            if (hasDefault) return;
             // register self
             for (auto &pChan2CasePair : mpChan2Case) {
                 auto &case_ = pChan2CasePair.second;
