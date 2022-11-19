@@ -6,13 +6,13 @@ std::vector<Channel::Chan*> chanVec{&chan1, &chan2};
 
 Channel::Task taskWrite = [](const std::string& selectName, const std::string& chanName,
 const std::any& a) {
-    log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
+    LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
     return true;
 };
 
 Channel::Task taskRead = [](const std::string& selectName, const std::string& chanName,
 const std::any& a) {
-    log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
+    LOG("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
     return true;
 };
 
@@ -22,7 +22,7 @@ void fun() {
 
     chan1.write(&a,
     [](const std::string& selectName, const std::string& chanName, const std::any& a) {
-        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
+        LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
         return true;
     }
                );
@@ -73,13 +73,13 @@ void fun3() {
 
     bchan1.write(a,
     [](const std::string& selectName, const std::string& chanName, const std::any& a) {
-        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
+        LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     }
                 );
     bchan1.write(b, [](const std::string& selectName,
     const std::string& chanName, const std::any& a) {
-        log("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
+        LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     });
 }
@@ -89,7 +89,7 @@ void fun4() {
     bchan1.read(a, [](const std::string& selectName,
                        const std::string& chanName, const std::any& a) {
         //log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<int*>(a));
-        log("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
+        LOG("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
 
         return true;
     });

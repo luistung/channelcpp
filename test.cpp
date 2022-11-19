@@ -16,7 +16,7 @@ std::vector<ChanPtr> sampleChan(std::mt19937& engine) {
     int chanNum = uniformDist(engine);
     std::vector<ChanPtr> ret;
     for (int i = 0; i < chanNum; i++) {
-        int bufferSize = std::uniform_int_distribution<>(0, 1)(engine);
+        int bufferSize = std::uniform_int_distribution<>(0, 2)(engine);
         ret.emplace_back(new Channel::Chan{bufferSize, "chan" + std::to_string(i)});
     }
     return ret;
@@ -38,16 +38,20 @@ using SelectInstance = pair<string,vector<CaseInstance>>;
 using TestCase = vector<pair<microseconds, SelectInstance>>;
 
 SelectInstance sampleSelect(std::mt19937& engine, const std::string& name, const std::vector<Channel::Chan*>& chanVec) {
-    SelectInstance ret;
-    ret.first = name;
-    for (Channel::Chan *pChan : chanVec) {
-        if (!sampleBernoulli(engine))
-            continue;
-        Channel::METHOD method = sampleBernoulli(engine) ? ::Channel::METHOD::WRITE : ::Channel::METHOD::READ;
-        int val = std::uniform_int_distribution<>(0, 99)(engine);
-        ret.second.push_back(make_tuple(sampleSleep(engine), method, pChan, make_shared<int>(val)));
+    while (1) {
+        SelectInstance ret;
+        ret.first = name;
+        for (Channel::Chan *pChan : chanVec) {
+            if (!sampleBernoulli(engine))
+                continue;
+            Channel::METHOD method = sampleBernoulli(engine) ? ::Channel::METHOD::WRITE : ::Channel::METHOD::READ;
+            int val = std::uniform_int_distribution<>(0, 99)(engine);
+            ret.second.push_back(make_tuple(sampleSleep(engine), method, pChan, make_shared<int>(val)));
+        }
+        if (!ret.second.empty())
+            return ret;
     }
-    return ret;
+
 }
 
 TestCase sampleTestCase (std::mt19937& engine, const std::vector<Channel::Chan*>& chanVec) {
@@ -143,18 +147,18 @@ void doEmulate(const TestCase &selectInstances,
                                     map<pair<Channel::Chan*, Channel::METHOD>, set<int>>& blockSelect,
                                     set<Channel::NamedStatus>& results) {
     /*cout << "consumed:";
-    //for (int i : consumedSelect) cout << i << ",";
+    for (int i : consumedSelect) cout << i << ",";
     cout << endl;
-    //cout << "flag:" << consumedFlag.size();
-    //for (bool i : consumedFlag) cout << i << ",";
+    cout << "flag:";
+    for (bool i : consumedFlag) cout << i << ",";
     cout << endl;
 
     cout << "block select:";
     for (auto& [key, value]:blockSelect) {
-        //for (int i : value) cout << i << " " << key.first << " " << key.second << endl;
+        for (int i : value) cout << i << " " << key.first << " " << key.second << endl;
     }
-    cout << endl TODO*/
-
+    cout << endl;
+    cout << endl;*/
 
     if (consumedSelect.size() >=
                                selectInstances.size()) {
@@ -212,14 +216,14 @@ void doEmulate(const TestCase &selectInstances,
             for (const CaseInstance &c : selectInstances.at(i).second.second) {
                 Channel::Chan *pChan = get<2>(c);
                 Channel::METHOD method = get<1>(c);
-                if (method == Channel::METHOD::READ && !pChan->empty()) {
+                if (method == Channel::METHOD::READ && chan2Qsize[pChan] > 0) {
                     hasBuffer = true;
                     chan2Qsize[pChan]--;
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
                           consumedFlag, blockSelect, results);
                     chan2Qsize[pChan]++;
                 }
-                if (method == Channel::METHOD::WRITE && !pChan->full()) {
+                if (method == Channel::METHOD::WRITE && chan2Qsize[pChan] < pChan->getSize()) {
                     hasBuffer = true;
                     chan2Qsize[pChan]++;
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
@@ -282,7 +286,7 @@ auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> Chan
     auto retFun = [=](const std::string &selectName, const std::string &chanName,
     const any& a) {
         this_thread::sleep_for(sleepTime);
-        log("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
+        LOG("###%s:%s:%s:%d\n", selectName.c_str(), ((method == Channel::METHOD::READ) ? "read" : "write"), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     };
     return retFun;
@@ -344,7 +348,7 @@ int main() {
 
     for (int i = 0; i < 100; i++) {
         std::cout << "rand number:" << i << std::endl;
-        std::mt19937 engine(45);
+        std::mt19937 engine(i);
         testcase(engine);
     }
     return 0;

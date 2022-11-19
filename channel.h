@@ -11,9 +11,11 @@
 
 using namespace std::chrono_literals;
 
-template <typename... T> void log(T... args) {
-    printf(args...);
-}
+#ifdef NDEBUG
+#define LOG(...) void(0)
+#else
+#define LOG printf
+#endif
 
 namespace Channel {
 
@@ -79,14 +81,12 @@ class Chan {
         std::unique_lock<std::mutex> lock(mMutex);
 
         mPayload = val;
-        if (isBuffered()) bufferPush();
         mCv.notify_all();
     }
 
     void doRead(const Select *pSelect, std::any& val) {
         std::unique_lock<std::mutex> lock(mMutex);
-        mCv.wait(lock, [&] { return isBuffered() ? !empty() : mPayload.has_value(); });
-        if (isBuffered()) bufferPop();
+        mCv.wait(lock, [&] { return mPayload.has_value(); });
         val.swap(mPayload);
         mPayload.reset();
 
@@ -97,8 +97,7 @@ class Chan {
         if (full()) {
             return false;
         }
-        mPayload = val;
-        if (isBuffered()) bufferPush();
+        mBuffer.emplace(val);
         return true;
     }
 
@@ -107,9 +106,9 @@ class Chan {
         if (empty()) {
             return false;
         }
-        if (isBuffered()) bufferPop();
-        val.swap(mPayload);
-        mPayload.reset();
+        val.swap(mBuffer.front());
+        mBuffer.pop();
+    
         return true;
     }
 
@@ -243,6 +242,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                     pSelect = pChan->waitingSelectList.back()
                               .first; // remove blocked select
                     pChan->waitingSelectList.pop_back();
+                    LOG("%s removed from %s's waiting list by %s\n", pSelect->mName.c_str(), pChan->mName.c_str(), this->mName.c_str());
                     hasWaiter = true;
                     break;
                 }
@@ -251,6 +251,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                         pChan->waitingSelectList.front().second == READ) {
                     pSelect = pChan->waitingSelectList.front().first;
                     pChan->waitingSelectList.pop_front();
+                    LOG("%s removed from %s's waiting list by %s\n", pSelect->mName.c_str(), pChan->mName.c_str(), this->mName.c_str());
                     hasWaiter = true;
                     break;
                 }
@@ -266,6 +267,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                 Chan *pChan = pChan2CasePair.first;
                 pChan->waitingSelectList.remove_if(
                 [=](std::pair<Select *, METHOD> &a) {
+                    LOG("%s removed from %s's waiting list\n", pSelect->mName.c_str(), pChan->mName.c_str());
                     return a.first == pSelect;
                 });
             }
@@ -279,6 +281,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
                 Chan *pChan = pCase->mpChan;
                 if (pChan->isBuffered()) {
                     if (pCase->tryExec(this)) {
+                        LOG("%s non block\n", this->mName.c_str());
                         return;
                     }
                 }
@@ -286,6 +289,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
             // register self
             for (auto &pChan2CasePair : mpChan2Case) {
                 auto &case_ = pChan2CasePair.second;
+                LOG("%s add into %s's waiting list\n", this->mName.c_str(), case_.mpChan->mName.c_str());
                 if (case_.mMethod == READ) {
                     case_.mpChan->waitingSelectList.emplace_front(this, READ);
                 } else {
@@ -298,6 +302,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
     if (hasWaiter) {
         {
             std::unique_lock<std::mutex> lock(pSelect->mMutex);
+            LOG("%s notify %s \n", this->mName.c_str(), pSelect->mName.c_str());
             pSelect->mpChanTobeNotified = pCase->mpChan;
         }
         pSelect->mCv.notify_all();
@@ -311,6 +316,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
     mCv.wait(lock, [=]() {
         return mpChanTobeNotified != nullptr;
     });
+    LOG("%s notified\n", this->mName.c_str());
 
     mpChan2Case[mpChanTobeNotified].exec(this);
 }
@@ -331,6 +337,8 @@ NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec) {
     NamedStatus ret;
     for (auto &pChan : chanVec) {
         for (auto &[pSelect, method] : pChan->waitingSelectList) {
+            LOG("%s found in %s's waiting list\n", pSelect->mName.c_str(),
+                   pChan->mName.c_str());
             ret.insert(make_tuple(pSelect->mName, method, pChan->mName));
         }
     }
