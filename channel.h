@@ -75,7 +75,7 @@ class Select {
 class Chan {
   public:
     Chan(const std::string &name = "") : mName(name) {};
-    Chan(int size, const std::string &name = "") : mSize(size), mName(name) {};
+    Chan(int capacity, const std::string &name = "") : mCapacity(capacity), mName(name) {};
 
 
     void doWrite(const Select *pSelect, std::any& val) {
@@ -127,10 +127,10 @@ class Chan {
         return mBuffer.size() == 0;
     }
     bool full() {
-        return mBuffer.size() >= mSize;
+        return mBuffer.size() >= mCapacity;
     }
     bool isBuffered() {
-        return mSize > 0;
+        return mCapacity > 0;
     }
 
     void write(std::any val, Task fun) {
@@ -145,7 +145,7 @@ class Chan {
         return mName;
     }
 
-    size_t getSize() { return mSize; }
+    size_t getCapacity() { return mCapacity; }
 
    private:
     friend class Case;
@@ -156,7 +156,7 @@ class Chan {
     std::string mName;
 
     std::queue<std::any> mBuffer{};
-    int mSize{0};
+    int mCapacity{0};
     std::any mPayload;
 
     std::mutex mMutex; // protect mBuffer
@@ -374,7 +374,7 @@ void printNamedStatus(const NamedStatus &status) {
 void printChannel(const std::vector<Channel::Chan *>& chanVec) {
     printf("======================================\n");
     for (Channel::Chan *chan : chanVec) {
-        printf("---%s\t%d---\n", chan->getName().c_str(), static_cast<int>(chan->getSize()));
+        printf("---%s\t%d---\n", chan->getName().c_str(), static_cast<int>(chan->getCapacity()));
     }
     printf("======================================\n");
 }

@@ -27,9 +27,12 @@ bool sampleBernoulli(std::mt19937& engine) {
     return uniformReal(engine) > 0.5;
 }
 
-std::chrono::microseconds sampleSleep(std::mt19937& engine) {
+std::chrono::microseconds sleepTimeSum = std::chrono::microseconds{};
+std::chrono::microseconds sampleSleep(std::mt19937 &engine) {
     std::uniform_int_distribution<> uniformDist(0, 5);
-    std::chrono::microseconds ret = chrono::microseconds(uniformDist(engine) * 100);
+    std::chrono::microseconds sleepTime= chrono::microseconds(uniformDist(engine) * 100);
+    sleepTimeSum += sleepTime;
+    std::chrono::microseconds ret = sleepTime;
     return ret;
 }
 
@@ -225,7 +228,7 @@ void doEmulate(const TestCase &selectInstances,
                           consumedFlag, blockSelect, results);
                     chan2Qsize[pChan]++;
                 }
-                if (method == Channel::METHOD::WRITE && chan2Qsize[pChan] < pChan->getSize()) {
+                if (method == Channel::METHOD::WRITE && chan2Qsize[pChan] < pChan->getCapacity()) {
                     hasBuffer = true;
                     chan2Qsize[pChan]++;
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
@@ -305,6 +308,7 @@ auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> Chan
 
 Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, const TestCase& testCase) {
     vector<unique_ptr<thread>> threadPool;
+    sleepTimeSum = std::chrono::microseconds{}; //reset sleep time sum
     for (auto &[selectSleepTime, selectInstance] : testCase) {
         std::vector<Channel::Case> caseVec;
         string selectName = get<0>(selectInstance);
@@ -323,7 +327,7 @@ Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, con
         };
         threadPool.emplace_back(new thread(threadFun, selectName, caseVec, selectSleepTime));
     }
-    this_thread::sleep_for(2s);
+    this_thread::sleep_for(sleepTimeSum + 1s); //make sure thread has reached a stable state 
     Channel::NamedStatus namedStatus = Channel::watchNamedStatus(chanVec);
     for (auto &t : threadPool) { 
         t->detach();
