@@ -82,7 +82,7 @@ class Chan {
         std::unique_lock<std::mutex> lock(mMutex);
 
         mPayload = val;
-        mCv.notify_all();
+        mCv.notify_one();
     }
 
     void doRead(const Select *pSelect, std::any& val) {
@@ -168,7 +168,6 @@ class Chan {
 
 struct Coordinator {
     std::mutex mMutex;
-    std::condition_variable mCv;
 };
 Coordinator gCoordinator;
 
@@ -314,7 +313,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
             LOG("%s notify %s \n", this->mName.c_str(), pSelect->mName.c_str());
             pSelect->mpChanTobeNotified = pCase->mpChan;
         }
-        pSelect->mCv.notify_all();
+        pSelect->mCv.notify_one();
         pCase->exec(this);
         return;
     }

@@ -304,7 +304,7 @@ auto taskFun = [](const microseconds &sleepTime, Channel::METHOD method) -> Chan
 };
 
 Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, const TestCase& testCase) {
-    vector<thread> threadPool;
+    vector<unique_ptr<thread>> threadPool;
     for (auto &[selectSleepTime, selectInstance] : testCase) {
         std::vector<Channel::Case> caseVec;
         string selectName = get<0>(selectInstance);
@@ -321,12 +321,13 @@ Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, con
             printf("%s start\n", selectName.c_str());
             Channel::Select(selectName, caseVec.begin(), caseVec.end());
         };
-        threadPool.emplace_back(threadFun, selectName, caseVec, selectSleepTime);
+        threadPool.emplace_back(new thread(threadFun, selectName, caseVec, selectSleepTime));
     }
     this_thread::sleep_for(2s);
     Channel::NamedStatus namedStatus = Channel::watchNamedStatus(chanVec);
-    for (auto &t : threadPool)
-        t.detach();
+    for (auto &t : threadPool) { 
+        t->detach();
+    }
     return namedStatus;
 }
 
