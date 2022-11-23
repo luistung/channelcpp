@@ -123,13 +123,13 @@ class Chan {
         mBuffer.pop();
     }
 
-    bool empty() {
+    bool empty() const {
         return mBuffer.size() == 0;
     }
-    bool full() {
+    bool full() const {
         return mBuffer.size() >= mCapacity;
     }
-    bool isBuffered() {
+    bool isBuffered() const {
         return mCapacity > 0;
     }
 
@@ -141,11 +141,11 @@ class Chan {
         Select{mName, Case{METHOD::READ, this, val, fun}};
     }
 
-    std::string getName() {
+    std::string getName() const {
         return mName;
     }
 
-    size_t getCapacity() { return mCapacity; }
+    size_t getCapacity() const { return mCapacity; }
 
    private:
     friend class Case;
@@ -162,7 +162,6 @@ class Chan {
     std::mutex mMutex; // protect mBuffer
     std::condition_variable mCv;
 
-  public:
     std::list<std::pair<Select *, METHOD>> waitingSelectList;
 };
 
