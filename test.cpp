@@ -146,11 +146,11 @@ set<Channel::NamedStatus> emulate2(const TestCase &selectInstances) {
 }
 
 void doEmulate(const TestCase &selectInstances,
-                                    map<Channel::Chan *, int>& chan2Qsize,
-                                    std::vector<int>& consumedSelect,
-                                    std::vector<bool>& consumedFlag,
-                                    map<pair<Channel::Chan*, Channel::METHOD>, set<int>>& blockSelect,
-                                    set<Channel::NamedStatus>& results) {
+               map<Channel::Chan *, int>& chan2Qsize,
+               std::vector<int>& consumedSelect,
+               std::vector<bool>& consumedFlag,
+               map<pair<Channel::Chan*, Channel::METHOD>, set<int>>& blockSelect,
+               set<Channel::NamedStatus>& results) {
     /*cout << "consumed:";
     for (int i : consumedSelect) cout << i << ",";
     cout << endl;
@@ -166,12 +166,12 @@ void doEmulate(const TestCase &selectInstances,
     cout << endl;*/
 
     if (consumedSelect.size() >=
-                               selectInstances.size()) {
+            selectInstances.size()) {
         Channel::NamedStatus result;
         for (auto &[chan2method, selectSet] : blockSelect) {
             for (int selectPos : selectSet) {
                 auto tup = make_tuple(get<0>(selectInstances[selectPos].second),
-                           chan2method.second, chan2method.first->getName());
+                                      chan2method.second, chan2method.first->getName());
                 result.insert(tup);
             }
         }
@@ -189,7 +189,7 @@ void doEmulate(const TestCase &selectInstances,
             Channel::METHOD method = get<1>(c);
             Channel::METHOD needMethod = (method == Channel::METHOD::READ) ? Channel::METHOD::WRITE : Channel::METHOD::READ;
 
-            
+
             set<int> &blockSelectSet = blockSelect[make_pair(pChan, needMethod)];
             if (!blockSelectSet.empty()) hasMatchBlock = true;
             else
@@ -197,10 +197,12 @@ void doEmulate(const TestCase &selectInstances,
             vector<int> selectPoses;
             transform(blockSelectSet.begin(), blockSelectSet.end(),
                       back_insert_iterator(selectPoses),
-                      [](int a) { return a; });
+            [](int a) {
+                return a;
+            });
             for (int peerSelectPos : selectPoses) {
                 vector<pair<pair<Channel::Chan *, Channel::METHOD>, int>>
-                    removedItems;
+                        removedItems;
                 for (auto &[key, selectSet] : blockSelect) {
                     if (selectSet.erase(peerSelectPos) != 0) {
                         removedItems.emplace_back(key, peerSelectPos);
@@ -209,7 +211,7 @@ void doEmulate(const TestCase &selectInstances,
 
                 doEmulate(selectInstances, chan2Qsize, consumedSelect,
                           consumedFlag, blockSelect, results);
-                
+
                 for (auto& [key, removedPos] : removedItems) {
                     blockSelect[key].insert(removedPos);
                 }
@@ -225,31 +227,30 @@ void doEmulate(const TestCase &selectInstances,
                     hasBuffer = true;
                     chan2Qsize[pChan]--;
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
-                          consumedFlag, blockSelect, results);
+                              consumedFlag, blockSelect, results);
                     chan2Qsize[pChan]++;
                 }
                 if (method == Channel::METHOD::WRITE && chan2Qsize[pChan] < pChan->getCapacity()) {
                     hasBuffer = true;
                     chan2Qsize[pChan]++;
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
-                          consumedFlag, blockSelect, results);
+                              consumedFlag, blockSelect, results);
                     chan2Qsize[pChan]--;
                 }
             }
             if (!hasBuffer) {
                 if (get<2>(selectInstances.at(i).second)) {
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
-                                        consumedFlag, blockSelect, results);
-                }
-                else {
+                              consumedFlag, blockSelect, results);
+                } else {
                     for (const CaseInstance &c : get<1>(selectInstances.at(i).second)) {
                         Channel::Chan *pChan = get<2>(c);
                         Channel::METHOD method = get<1>(c);
                         blockSelect[make_pair(pChan, method)].insert(i);
                     }
                     doEmulate(selectInstances, chan2Qsize, consumedSelect,
-                                        consumedFlag, blockSelect, results);
-                    
+                              consumedFlag, blockSelect, results);
+
                     for (const CaseInstance &c : get<1>(selectInstances.at(i).second)) {
                         Channel::Chan *pChan = get<2>(c);
                         Channel::METHOD method = get<1>(c);
@@ -259,7 +260,7 @@ void doEmulate(const TestCase &selectInstances,
             }
 
         }
-        
+
 
         consumedSelect.pop_back();
         consumedFlag[i] = false;
@@ -267,10 +268,12 @@ void doEmulate(const TestCase &selectInstances,
 }
 
 set<Channel::NamedStatus> emulate(const TestCase &selectInstances,
-                                    std::vector<Channel::Chan *>& chanVec) {
+                                  std::vector<Channel::Chan *>& chanVec) {
     map<Channel::Chan *, int> chan2Qsize;
     std::for_each(chanVec.begin(), chanVec.end(),
-                  [&chan2Qsize](auto &a) { chan2Qsize[a] = 0; });
+    [&chan2Qsize](auto &a) {
+        chan2Qsize[a] = 0;
+    });
     std::vector<int> consumedSelect;
     std::vector<bool> consumedFlag(selectInstances.size());
     map<pair<Channel::Chan *, Channel::METHOD>, set<int>> blockSelect;
@@ -290,7 +293,7 @@ void printTestCase(TestCase& testCase) {
         printf("default:%s\n", isDefault ? "yes" : "no");
         for (auto &[_, method, pChan, __] : get<1>(selectInstance)) {
             printf("---%s\t%s\t%s---\n", selectName.c_str(),
-            method == Channel::METHOD::READ ? "read" : "write", pChan->getName().c_str());
+                   method == Channel::METHOD::READ ? "read" : "write", pChan->getName().c_str());
         }
         printf("======================================\n");
     }
@@ -327,9 +330,9 @@ Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, con
         };
         threadPool.emplace_back(new thread(threadFun, selectName, caseVec, selectSleepTime));
     }
-    this_thread::sleep_for(sleepTimeSum + 1s); //make sure thread has reached a stable state 
+    this_thread::sleep_for(sleepTimeSum + 1s); //make sure thread has reached a stable state
     Channel::NamedStatus namedStatus = Channel::watchNamedStatus(chanVec);
-    for (auto &t : threadPool) { 
+    for (auto &t : threadPool) {
         t->detach();
     }
     return namedStatus;

@@ -23,7 +23,7 @@ void fun(std::vector<Channel::Chan*>& chanVec) {
         LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     }
-               );
+                     );
 
 }
 void fun2(std::vector<Channel::Chan*>& chanVec) {
@@ -32,11 +32,11 @@ void fun2(std::vector<Channel::Chan*>& chanVec) {
         "select1",
         Channel::Case{
             chanVec[0] >> a,
-            taskRead
+                       taskRead
         },
         Channel::Case{
             chanVec[1] << b,
-            taskWrite
+                       taskWrite
         }
 
     };
@@ -71,7 +71,7 @@ void fun3(std::vector<Channel::Chan*>& chanVec) {
         LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
         return true;
     }
-                );
+                     );
     chanVec[0]->write(b, [](const std::string& selectName,
     const std::string& chanName, const std::any& a) {
         LOG("%s:write:%s:%d\n", selectName.c_str(), chanName.c_str(), *any_cast<shared_ptr<int>>(a));
@@ -82,7 +82,7 @@ void fun3(std::vector<Channel::Chan*>& chanVec) {
 void fun4(std::vector<Channel::Chan*>& chanVec) {
     shared_ptr<int> a;
     chanVec[0]->read(a, [](const std::string& selectName,
-                       const std::string& chanName, const std::any& a) {
+    const std::string& chanName, const std::any& a) {
         LOG("%s:read:%s:%d\n", selectName.c_str(), chanName.c_str(),
             *any_cast<shared_ptr<int>>(a));
 
@@ -97,9 +97,9 @@ int testBuffered() {
         std::this_thread::sleep_for(1s);
         fun3(chanVec); //write
     });
-    
+
     std::thread t2([&]() {
-        
+
         fun4(chanVec); //read
     });
 
@@ -114,7 +114,7 @@ void fun5(std::vector<Channel::Chan*>& chanVec) {
         "select1",
         Channel::Case{
             chanVec[0] >> a,
-            taskRead
+                       taskRead
         },
         Channel::Default{
         }

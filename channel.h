@@ -38,10 +38,10 @@ class Case {
   public:
     Case() = default;
     Case(const Case &case_) = default;
-    Case(Command&& command, Task pFunc) : mMethod(command.method), 
-                                        mpChan(command.pChan), 
-                                        mpVal(command.pVal), 
-                                        mpFunc(pFunc) {}
+    Case(Command&& command, Task pFunc) : mMethod(command.method),
+        mpChan(command.pChan),
+        mpVal(command.pVal),
+        mpFunc(pFunc) {}
 
   private:
     friend class Select;
@@ -125,7 +125,7 @@ class Chan {
         }
         val.swap(mBuffer.front());
         mBuffer.pop();
-    
+
         return true;
     }
 
@@ -161,9 +161,11 @@ class Chan {
         return mName;
     }
 
-    size_t getCapacity() const { return mCapacity; }
+    size_t getCapacity() const {
+        return mCapacity;
+    }
 
-   private:
+  private:
     friend class Case;
     friend class Select;
     friend Status watchStatus(const std::vector<Chan *> &chanVec);
@@ -296,7 +298,7 @@ void Select::doSelect(const std::string &name, T begin, T end) {
 
 
         if (!hasWaiter) {
-            
+
             for (auto &pChan2CasePair : mpChan2Case) {
                 pCase = &pChan2CasePair.second;
                 Chan *pChan = pCase->mpChan;
@@ -361,7 +363,7 @@ NamedStatus watchNamedStatus(const std::vector<Chan *> &chanVec) {
     for (auto &pChan : chanVec) {
         for (auto &[pSelect, method] : pChan->waitingSelectList) {
             LOG("%s found in %s's waiting list\n", pSelect->mName.c_str(),
-                   pChan->mName.c_str());
+                pChan->mName.c_str());
             ret.insert(make_tuple(pSelect->mName, method, pChan->mName));
         }
     }
