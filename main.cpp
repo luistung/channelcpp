@@ -31,15 +31,11 @@ void fun2(std::vector<Channel::Chan*>& chanVec) {
     Channel::Select{
         "select1",
         Channel::Case{
-            Channel::METHOD::READ,
-            chanVec[0],
-            a,
+            chanVec[0] >> a,
             taskRead
         },
         Channel::Case{
-            Channel::METHOD::WRITE,
-            chanVec[1],
-            b,
+            chanVec[1] << b,
             taskWrite
         }
 
@@ -117,9 +113,7 @@ void fun5(std::vector<Channel::Chan*>& chanVec) {
     Channel::Select{
         "select1",
         Channel::Case{
-            Channel::METHOD::READ,
-            chanVec[0],
-            a,
+            chanVec[0] >> a,
             taskRead
         },
         Channel::Default{

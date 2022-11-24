@@ -28,12 +28,20 @@ using Task = std::function<bool(const std::string &, const std::string &, const 
 using Status = std::vector<std::tuple<Select *, METHOD, Chan *>>;
 using NamedStatus = std::set<std::tuple<std::string, METHOD, std::string>>;
 
+struct Command {
+    Channel::Chan *pChan;
+    METHOD method;
+    std::any pVal;
+};
+
 class Case {
   public:
     Case() = default;
     Case(const Case &case_) = default;
-    Case(METHOD method, Chan *pChan, std::any pVal, Task pFunc)
-        : mMethod(method), mpChan(pChan), mpVal(pVal), mpFunc(pFunc) {}
+    Case(Command&& command, Task pFunc) : mMethod(command.method), 
+                                        mpChan(command.pChan), 
+                                        mpVal(command.pVal), 
+                                        mpFunc(pFunc) {}
 
   private:
     friend class Select;
@@ -71,6 +79,14 @@ class Select {
     std::condition_variable mCv;
     Chan *mpChanTobeNotified{nullptr};
 };
+
+Command operator>>(Chan*pChan, std::any pVal) {
+    return Command{pChan, METHOD::READ, pVal};
+}
+
+Command operator<<(Chan*pChan, std::any pVal) {
+    return Command{pChan, METHOD::WRITE, pVal};
+}
 
 class Chan {
   public:
@@ -134,11 +150,11 @@ class Chan {
     }
 
     void write(std::any val, Task fun) {
-        Select{mName, Case{METHOD::WRITE, this, val, fun}};
+        Select{mName, Case{this << val, fun}};
     }
 
     void read(std::any val, Task fun) {
-        Select{mName, Case{METHOD::READ, this, val, fun}};
+        Select{mName, Case{this >> val, fun}};
     }
 
     std::string getName() const {

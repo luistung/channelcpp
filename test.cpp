@@ -315,7 +315,7 @@ Channel::NamedStatus executeTestCase(const vector<Channel::Chan *> &chanVec, con
         for (const tuple<microseconds, ::Channel::METHOD, Channel::Chan *, shared_ptr<int>> &caseTup : get<1>(selectInstance)) {
             microseconds caseSleepTime = get<0>(caseTup);
             Channel::METHOD method = get<1>(caseTup);
-            caseVec.emplace_back(method, get<2>(caseTup), get<3>(caseTup), taskFun(caseSleepTime, method));
+            caseVec.emplace_back(Channel::Command{get<2>(caseTup), method, get<3>(caseTup)}, taskFun(caseSleepTime, method));
         }
         if (get<2>(selectInstance)) {
             caseVec.emplace_back(Channel::Default{});
