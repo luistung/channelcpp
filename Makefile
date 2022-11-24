@@ -1,6 +1,10 @@
-.PHONY: format
-test: test.cpp channel.h
+.PHONY: format test
+
+test_bin: test.cpp channel.h
 	g++ -std=c++20 -g -O0 -o $@ $< -I.
+
+test: test_bin
+	sh test.sh
 
 main: main.cpp channel.h
 	g++ -std=c++20 -g -O0 -o $@ $< -I.

@@ -361,11 +361,10 @@ void testcase(std::mt19937& engine) {
     assert(emulateResult.find(runResult) != emulateResult.end());
     return;
 }
-int main() {
-    for (int i = 0; i < 100; i++) {
-        std::cout << "rand number:" << i << std::endl;
-        std::mt19937 engine(i);
-        testcase(engine);
-    }
+int main(int argc, char** args) {
+    int seed = stoi(args[1]);
+    std::cout << "seed:" << seed << std::endl;
+    std::mt19937 engine(seed);
+    testcase(engine);
     return 0;
 }
